@@ -37,7 +37,7 @@ document.addEventListener('DOMContentLoaded', function() {
      * @param {number} count - Number of stars
      */
     function updateStarsCount(count) {
-        starsCountElement.textContent = `⭐ ${count} stars on GitHub`;
+        starsCountElement.textContent = `${count} stars on GitHub`;
     }
     
     // Initialize the stars counter
