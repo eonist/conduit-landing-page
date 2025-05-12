@@ -26,22 +26,23 @@ header {
 }
 
 .logo-container {
-    margin-bottom: 1.75rem;
+    margin-bottom: 0.75rem;
 }
 
 .logo {
-    max-width: 110px;
+    max-width: 112px;
     height: auto;
 }
 
 h1 {
     font-size: 2.5rem;
     font-weight: 600;
+    margin-top: 0;
     margin-bottom: 0.5rem;
 }
 
 .tagline {
-    font-size: 1.25rem;
+    font-size: 1rem;
     font-weight: 400;
     color: #A1A1A6;
     margin-bottom: 1.75rem;
@@ -49,11 +50,26 @@ h1 {
 
 .github-stats {
     display: inline-block;
+}
+
+.github-stats a {
+    display: inline-block;
     background-color: #0B0B0B;
     border: 1px solid #2F2F31;
     border-radius: 9999px;
     padding: 0.5rem 1.5rem;
     font-size: 0.875rem;
+    color: inherit;
+    text-decoration: none;
+}
+
+.github-stats a:hover {
+    /* No hover effect */
+}
+
+.logo-container a {
+    display: inline-block;
+    text-decoration: none;
 }
 
 /* Feature grid */
@@ -71,15 +87,16 @@ h1 {
 .feature-card {
     background-color: #0B0B0B; /* Updated card background */
     border: 1px solid #2F2F31; /* Updated border color */
-    border-radius: 4px;
-    padding: 1.125rem;
-    min-height: 180px; /* Further reduced height */
+    border-radius: 8px;
+    padding: 1.125rem 1.125rem;
+    min-height: 175px; /* Further reduced height */
     display: flex;
     flex-direction: column;
+    justify-content: flex-start;
 }
 
 .icon-container {
-    margin-bottom: 0.85rem;
+    margin-bottom: 0.5rem;
 }
 
 /* SVG Icon white filter technique */
@@ -121,7 +138,7 @@ h1 {
 }
 
 .installation li {
-    margin-bottom: 0.6rem;
+    margin-bottom: 0.4rem;
     position: relative;
     text-align: center;
     font-size: 0.85rem;
@@ -177,7 +194,7 @@ h1 {
     }
     
     .feature-card {
-        padding: 1.25rem;
+        padding: 1rem 1.125rem;
         min-height: auto;
     }
     
