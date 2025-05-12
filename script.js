@@ -1,8 +1,5 @@
 // GitHub Stars Counter
 document.addEventListener('DOMContentLoaded', function() {
-    // Default stars count from the design
-    const defaultStarsCount = 134;
-    
     // Configuration for GitHub API
     const repoOwner = 'eonist';
     const repoName = 'claude-talk-to-figma-mcp';
@@ -22,19 +19,20 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             const data = await response.json();
-            const starsCount = data.stargazers_count || defaultStarsCount;
-            
-            updateStarsCount(starsCount);
+            if (typeof data.stargazers_count === 'number') {
+                updateStarsCount(data.stargazers_count);
+            } else {
+                updateStarsCount('N/A');
+            }
         } catch (error) {
             console.error('Error fetching GitHub stars:', error);
-            // Use default count if API fails
-            updateStarsCount(defaultStarsCount);
+            updateStarsCount('N/A');
         }
     }
     
     /**
      * Update the stars count display
-     * @param {number} count - Number of stars
+     * @param {number|string} count - Number of stars or fallback string
      */
     function updateStarsCount(count) {
         starsCountElement.textContent = `${count} stars on GitHub`;
