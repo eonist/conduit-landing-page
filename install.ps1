@@ -89,8 +89,9 @@ function Get-WindowsArchTag {
     $arch = $env:PROCESSOR_ARCHITECTURE
     switch -Regex ($arch) {
         'AMD64' { return 'x64' }
+        'ARM64' { return 'arm64' }
         default {
-            Write-ConduitError "Unsupported Windows architecture '$arch'. Only x64 is supported in v1."
+            Write-ConduitError "Unsupported Windows architecture '$arch'. Only x64 and arm64 are supported in this version."
             exit 1
         }
     }
