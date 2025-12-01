@@ -110,7 +110,40 @@ function Install-OrUpdate-Binary {
 
     if (Test-NeedsUpdate $BinaryPath) {
         Write-ConduitLog "Installing/updating Conduit MCP binary ($asset)..."
-        Invoke-WebRequest -Uri $url -UseBasicParsing -OutFile $BinaryPath
+        Write-ConduitLog "Downloading from: $url"
+        
+        $tmpBinary = [System.IO.Path]::GetTempFileName()
+        
+        try {
+            # Download to temp file
+            if (-not (Invoke-WebRequest -Uri $url -UseBasicParsing -OutFile $tmpBinary -ErrorAction Stop)) {
+                throw "Failed to download binary"
+            }
+            
+            # Verify file is not empty
+            if ((Get-Item -LiteralPath $tmpBinary).Length -eq 0) {
+                throw "Downloaded file is empty"
+            }
+            
+            # Verify binary has MZ header (PE executable signature)
+            $bytes = Get-Content -LiteralPath $tmpBinary -Encoding Byte -TotalCount 2 -ErrorAction Stop
+            if (-not ($bytes[0] -eq 0x4D -and $bytes[1] -eq 0x5A)) {
+                throw "Downloaded file is not a valid Windows executable (missing MZ header)"
+            }
+            
+            Write-ConduitLog "Binary verified as valid Windows executable"
+            
+            # Atomic move to final location
+            Move-Item -LiteralPath $tmpBinary -Destination $BinaryPath -Force
+            Write-ConduitLog "Binary installed successfully to: $BinaryPath"
+        }
+        catch {
+            if (Test-Path -LiteralPath $tmpBinary) {
+                Remove-Item -LiteralPath $tmpBinary -ErrorAction SilentlyContinue
+            }
+            Write-ConduitError "Failed to download binary: $($_.Exception.Message)"
+            throw
+        }
     }
     else {
         Write-ConduitLog "Conduit MCP binary is up-to-date: $BinaryPath"
@@ -142,8 +175,22 @@ function Install-OrUpdate-Plugin {
     $tmpZip = [System.IO.Path]::GetTempFileName()
 
     try {
-        Invoke-WebRequest -Uri $url -UseBasicParsing -OutFile $tmpZip
-        Expand-Archive -Path $tmpZip -DestinationPath $PluginDir -Force
+        # Download plugin
+        if (-not (Invoke-WebRequest -Uri $url -UseBasicParsing -OutFile $tmpZip -ErrorAction Stop)) {
+            throw "Failed to download Figma plugin"
+        }
+        
+        # Verify file is not empty
+        if ((Get-Item -LiteralPath $tmpZip).Length -eq 0) {
+            throw "Downloaded Figma plugin file is empty"
+        }
+        
+        # Extract
+        Expand-Archive -Path $tmpZip -DestinationPath $PluginDir -Force -ErrorAction Stop
+    }
+    catch {
+        Write-ConduitError "Failed to install Figma plugin: $($_.Exception.Message)"
+        return $false
     }
     finally {
         if (Test-Path -LiteralPath $tmpZip) {
