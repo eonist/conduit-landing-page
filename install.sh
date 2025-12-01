@@ -4,20 +4,6 @@
 # Usage:
 #   curl -sSL https://conduit.design/install.sh | bash -s -- [--run]
 #
-# Behavior:
-#   - Detects OS/arch (macOS/Linux, x64/arm64)
-#   - Downloads the appropriate conduit-mcp binary from GitHub Releases
-#   - Installs it to ~/.local/bin/conduit-mcp (creating the dir if needed)
-#   - Downloads figma-plugin.zip and extracts it to ~/.conduit/figma-plugin/
-#   - If invoked with --run, ensures everything is up-to-date and then
-#     execs `conduit-mcp --stdio`.
-#
-# NOTE: For v1 this expects assets in the public repo:
-#   https://github.com/conduit-design/conduit_design
-# with names like:
-#   conduit-macos-arm64, conduit-macos-x64, conduit-linux-x64, conduit-linux-arm64
-#   figma-plugin.zip
-#
 set -euo pipefail
 
 # -----------------------------
@@ -40,7 +26,6 @@ BASE_URL="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest/down
 # -----------------------------
 
 log() {
-  # stderr so MCP clients don't confuse logs with protocol
   printf '[conduit.install] %s\n' "$*" >&2
 }
 
@@ -70,17 +55,26 @@ detect_os_arch() {
       exit 1
       ;;
   esac
+  
+  log "Detected: ${OS_NAME}-${ARCH_NAME}"
 }
 
 needs_update() {
-  # Returns 0 (true) if file is missing or older than 1 day
   local path="$1"
   if [ ! -f "${path}" ]; then
     return 0
   fi
-  # -mtime +0 means strictly older than 24h; adjust if you want a different cadence
-  if find "${path}" -mtime +0 >/dev/null 2>&1; then
-    return 0
+  # Check if file is older than 1 day
+  if [ "$(uname -s)" = "Darwin" ]; then
+    # macOS
+    if [ $(( $(date +%s) - $(stat -f %m "${path}") )) -gt 86400 ]; then
+      return 0
+    fi
+  else
+    # Linux
+    if find "${path}" -mtime +0 >/dev/null 2>&1; then
+      return 0
+    fi
   fi
   return 1
 }
@@ -94,10 +88,7 @@ ensure_plugin_dir() {
 }
 
 have_unzip() {
-  if command -v unzip >/dev/null 2>&1; then
-    return 0
-  fi
-  return 1
+  command -v unzip >/dev/null 2>&1
 }
 
 # -----------------------------
@@ -113,20 +104,39 @@ install_or_update_binary() {
 
   if needs_update "${BINARY_PATH}"; then
     log "Installing/updating Conduit MCP binary (${asset})..."
-    local tmp_file
-    tmp_file="$(mktemp)" # Create a temporary file
-
-    if curl -fsSL "${url}" -o "${tmp_file}"; then
-      sync || true # Ensure file is synced to disk
-      # Remove quarantine attribute for macOS consistency
-      xattr -d com.apple.quarantine "${tmp_file}" 2>/dev/null || true
-      mv "${tmp_file}" "${BINARY_PATH}" # Atomically move
-      chmod +x "${BINARY_PATH}" || true
-    else
-      rm -f "${tmp_file}" # Clean up temp file on failure
+    log "Downloading from: ${url}"
+    
+    # Download with better error handling
+    if ! curl -fsSL --fail --show-error "${url}" -o "${BINARY_PATH}.tmp"; then
       err "Failed to download binary from ${url}"
+      err "Please check your internet connection and try again."
+      rm -f "${BINARY_PATH}.tmp"
       exit 1
     fi
+    
+    # Verify download is not empty
+    if [ ! -s "${BINARY_PATH}.tmp" ]; then
+      err "Downloaded file is empty"
+      rm -f "${BINARY_PATH}.tmp"
+      exit 1
+    fi
+    
+    # Move to final location
+    sync || true # Ensure file system buffers are flushed before atomic move
+    mv "${BINARY_PATH}.tmp" "${BINARY_PATH}"
+    chmod +x "${BINARY_PATH}"
+    
+    # Verify it's a valid binary (macOS only)
+    if [ "${OS_NAME}" = "macos" ]; then
+      if ! file "${BINARY_PATH}" | grep -q "Mach-O"; then
+        err "Downloaded file is not a valid macOS executable"
+        err "File type: $(file ${BINARY_PATH})"
+        exit 1
+      fi
+      log "Binary verified as valid Mach-O executable"
+    fi
+    
+    log "Binary installed successfully to: ${BINARY_PATH}"
   else
     log "Conduit MCP binary is up-to-date: ${BINARY_PATH}"
   fi
@@ -157,9 +167,21 @@ install_or_update_plugin() {
   local tmp_zip
   tmp_zip="$(mktemp)"
 
-  curl -fsSL "${url}" -o "${tmp_zip}"
+  if ! curl -fsSL --fail --show-error "${url}" -o "${tmp_zip}"; then
+    err "Failed to download Figma plugin from ${url}"
+    err "Please check your internet connection and try again."
+    rm -f "${tmp_zip}"
+    return 1
+  fi
 
-  # -o: overwrite existing; -d: destination directory
+  # Verify download is not empty
+  if [ ! -s "${tmp_zip}" ]; then
+    err "Downloaded Figma plugin file is empty"
+    rm -f "${tmp_zip}"
+    return 1
+  fi
+
+  sync || true # Ensure file system buffers are flushed before atomic move
   unzip -o "${tmp_zip}" -d "${PLUGIN_DIR}" >/dev/null
 
   rm -f "${tmp_zip}"
