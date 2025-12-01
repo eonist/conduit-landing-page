@@ -113,8 +113,20 @@ install_or_update_binary() {
 
   if needs_update "${BINARY_PATH}"; then
     log "Installing/updating Conduit MCP binary (${asset})..."
-    curl -fsSL "${url}" -o "${BINARY_PATH}"
-    chmod +x "${BINARY_PATH}" || true
+    local tmp_file
+    tmp_file="$(mktemp)" # Create a temporary file
+
+    if curl -fsSL "${url}" -o "${tmp_file}"; then
+      sync || true # Ensure file is synced to disk
+      # Remove quarantine attribute for macOS consistency
+      xattr -d com.apple.quarantine "${tmp_file}" 2>/dev/null || true
+      mv "${tmp_file}" "${BINARY_PATH}" # Atomically move
+      chmod +x "${BINARY_PATH}" || true
+    else
+      rm -f "${tmp_file}" # Clean up temp file on failure
+      err "Failed to download binary from ${url}"
+      exit 1
+    fi
   else
     log "Conduit MCP binary is up-to-date: ${BINARY_PATH}"
   fi
