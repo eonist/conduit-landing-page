@@ -11,7 +11,6 @@ This script:
   - Downloads the appropriate conduit-mcp Windows binary from GitHub Releases
   - Installs it to $HOME/.local/bin/conduit-mcp.exe
   - Downloads figma-plugin.zip and extracts it to $HOME/.conduit/figma-plugin
-  - Optionally, with -Run, execs `conduit-mcp.exe --stdio`
 
 Release assets are expected in:
   https://github.com/conduit-design/conduit_design/releases/latest/download
@@ -20,10 +19,13 @@ with names like:
   figma-plugin.zip
 #>
 
-[CmdletBinding()]
-param(
-    [switch]$Run
-)
+<#
+IMPORTANT: This script handles installation ONLY. It does not run the server.
+The MCP host (e.g., Cursor, VSCode) must run the server in a separate step
+after this script completes. This two-step process (install, then run) is
+critical to prevent the installer's output from interfering with the server's
+stdio communication channel with the host.
+#>
 
 $ErrorActionPreference = "Stop"
 
@@ -48,23 +50,29 @@ $home = Get-ConduitHome
 
 # -----------------------------
 # Configuration
+# Defines constants and paths used throughout the script.
 # -----------------------------
 
+# Directory where the executable will be installed.
 $InstallDir  = Join-Path $home ".local\bin"
 $BinaryName  = "conduit-mcp.exe"
 $BinaryPath  = Join-Path $InstallDir $BinaryName
 
+# Directory where the Figma plugin will be installed.
 $PluginDir      = Join-Path $home ".conduit\figma-plugin"
 $PluginZipName  = "figma-plugin.zip"
 
+# GitHub repository details for downloading release assets.
 $GitHubOwner = "conduit-design"
 $GitHubRepo  = "conduit_design"
 $BaseUrl     = "https://github.com/$GitHubOwner/$GitHubRepo/releases/latest/download"
 
 # -----------------------------
 # Helpers
+# Utility functions used by the installer.
 # -----------------------------
 
+# Creates a directory if it does not already exist.
 function Ensure-Directory {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) {
@@ -72,6 +80,8 @@ function Ensure-Directory {
     }
 }
 
+# Checks if a file needs to be updated.
+# Returns $true if the file doesn't exist or is older than 24 hours.
 function Test-NeedsUpdate {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) {
@@ -84,6 +94,7 @@ function Test-NeedsUpdate {
     return ($age.TotalHours -gt 24)
 }
 
+# Detects the Windows CPU architecture (x64 or ARM64) to download the correct binary.
 function Get-WindowsArchTag {
     # Map PROCESSOR_ARCHITECTURE to our release arch tag
     $arch = $env:PROCESSOR_ARCHITECTURE
@@ -99,15 +110,18 @@ function Get-WindowsArchTag {
 
 # -----------------------------
 # Install / update binary
+# Downloads and installs the main conduit-mcp executable.
 # -----------------------------
 
 function Install-OrUpdate-Binary {
     Ensure-Directory $InstallDir
 
+    # Determine the correct binary asset based on architecture.
     $archTag = Get-WindowsArchTag
     $asset   = "conduit-windows-$archTag.exe"
     $url     = "$BaseUrl/$asset"
 
+    # Only download if the binary is missing or outdated.
     if (Test-NeedsUpdate $BinaryPath) {
         Write-ConduitLog "Installing/updating Conduit MCP binary ($asset)..."
         Write-ConduitLog "Downloading from: $url"
@@ -152,6 +166,7 @@ function Install-OrUpdate-Binary {
 
 # -----------------------------
 # Install / update Figma plugin
+# Downloads and extracts the Figma plugin.
 # -----------------------------
 
 function Install-OrUpdate-Plugin {
@@ -160,6 +175,7 @@ function Install-OrUpdate-Plugin {
     $manifestPath = Join-Path $PluginDir "manifest.json"
     $url          = "$BaseUrl/$PluginZipName"
 
+    # Only download if the plugin's manifest is missing or outdated.
     if (-not (Test-NeedsUpdate $manifestPath)) {
         Write-ConduitLog "Figma plugin is up-to-date at $PluginDir"
         return
@@ -205,11 +221,16 @@ function Install-OrUpdate-Plugin {
 
 # -----------------------------
 # Main
+# Main execution block that orchestrates the installation.
 # -----------------------------
 
 try {
+    # Step 1: Install or update the main binary. This is a critical step.
     Install-OrUpdate-Binary
 
+    # Step 2: Install or update the Figma plugin.
+    # This is in a separate try/catch because a failure here should not
+    # prevent the main binary from being installed.
     try {
         Install-OrUpdate-Plugin
     }
@@ -218,12 +239,10 @@ try {
         Write-ConduitError ("Figma plugin installation failed: " + $_.Exception.Message)
     }
 
-    # For MCP usage (iwr ... | iex), always launch the server so the process
-    # stays running and speaks MCP over stdio, similar to install.sh --run.
-    Write-ConduitLog "Launching Conduit MCP server via '$BinaryPath --stdio'..."
-    & $BinaryPath --stdio
+    Write-ConduitLog "Installation complete. To run the server manually, execute: $BinaryPath --stdio"
 }
 catch {
+    # Catch any errors from the main binary installation and exit.
     Write-ConduitError ($_.Exception.Message)
     exit 1
 }
